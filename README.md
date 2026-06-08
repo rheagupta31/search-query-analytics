@@ -2,7 +2,6 @@
 
 A production-style, end-to-end data engineering project modeling how users interact with a search engine — built as a Google interview portfolio project.
 
-**[Live Dashboard →](https://rheagupta.github.io/search-query-analytics/)**
 **[Live Dashboard →](https://rheagupta31.github.io/search-query-analytics/)**
 
 ---

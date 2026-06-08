@@ -1,0 +1,11 @@
+query_text_normalized,searches,ctr_pct,query_category
+best credit card,40,110.0,transactional
+iphone 16 price,32,96.9,transactional
+best books 2024,31,87.1,informational
+healthy recipes,30,83.3,informational
+github,27,85.2,navigational
+best laptop 2024,27,77.8,transactional
+chatgpt,26,73.1,navigational
+buy bitcoin,25,84.0,transactional
+climate change,23,82.6,informational
+how to learn programming,23,95.7,informational

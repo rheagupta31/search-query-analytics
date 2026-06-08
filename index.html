@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Search Query Analytics — Real Data Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+  :root {
+    --bg: #0a0e1a; --surface: #111827; --border: #1e2d3d;
+    --accent: #4ade80; --accent2: #38bdf8; --accent3: #f59e0b; --accent4: #f87171;
+    --text: #e2e8f0; --muted: #64748b; --card: #131f2e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; }
+
+  header {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 16px 28px; display: flex; align-items: center;
+    justify-content: space-between; position: sticky; top: 0; z-index: 100;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .dot { width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent);animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.5} }
+  .logo-text { font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;letter-spacing:.04em; }
+  .logo-text span { color:var(--accent); }
+  .badge { background:rgba(74,222,128,.12);color:var(--accent);font-family:'IBM Plex Mono',monospace;font-size:10px;padding:4px 10px;border-radius:20px;border:1px solid rgba(74,222,128,.3);letter-spacing:.06em; }
+  .ts { font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted); }
+
+  main { padding: 24px 28px; }
+
+  /* KPIs */
+  .kpi-row { display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px; }
+  .kpi { background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px 20px;position:relative;overflow:hidden; }
+  .kpi::before { content:'';position:absolute;top:0;left:0;right:0;height:2px;border-radius:10px 10px 0 0; }
+  .kpi.g::before{background:var(--accent)} .kpi.b::before{background:var(--accent2)} .kpi.a::before{background:var(--accent3)} .kpi.r::before{background:var(--accent4)}
+  .kpi-label { font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;margin-bottom:8px; }
+  .kpi-val { font-family:'IBM Plex Mono',monospace;font-size:30px;font-weight:600;line-height:1;margin-bottom:6px; }
+  .kpi.g .kpi-val{color:var(--accent)} .kpi.b .kpi-val{color:var(--accent2)} .kpi.a .kpi-val{color:var(--accent3)} .kpi.r .kpi-val{color:var(--accent4)}
+  .kpi-sub { font-size:11px;color:var(--muted); }
+
+  /* Charts */
+  .grid-2 { display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:14px; }
+  .grid-3 { display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px; }
+  .card { background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px 20px; }
+  .card-title { font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin-bottom:3px; }
+  .card-sub { font-size:12px;font-weight:500;color:var(--text);margin-bottom:16px; }
+  .wrap { position:relative;height:200px; }
+  .wrap.tall { height:250px; }
+
+  /* Table */
+  .table-card { background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px 20px;margin-bottom:14px; }
+  table { width:100%;border-collapse:collapse;margin-top:14px; }
+  thead th { font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);text-align:left;padding:0 10px 10px;border-bottom:1px solid var(--border); }
+  tbody tr { border-bottom:1px solid rgba(30,45,61,.5);transition:background .1s; }
+  tbody tr:hover { background:rgba(74,222,128,.03); }
+  tbody td { padding:9px 10px;font-size:12px; }
+  .bar-wrap { display:flex;align-items:center;gap:8px; }
+  .bar-bg { flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden; }
+  .bar-fill { height:100%;border-radius:2px;background:var(--accent2);transition:width .6s; }
+  .tag { display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-family:'IBM Plex Mono',monospace;font-weight:500; }
+  .tag.info { background:rgba(56,189,248,.12);color:var(--accent2); }
+  .tag.nav { background:rgba(245,158,11,.12);color:var(--accent3); }
+  .tag.trans { background:rgba(74,222,128,.12);color:var(--accent); }
+  .rank { display:inline-block;width:22px;height:22px;border-radius:4px;background:var(--border);text-align:center;line-height:22px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;color:var(--muted); }
+  .rank.top { background:rgba(74,222,128,.15);color:var(--accent); }
+
+  /* Loading */
+  #loading { position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;gap:16px; }
+  .spinner { width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite; }
+  @keyframes spin { to{transform:rotate(360deg)} }
+  .load-text { font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted); }
+
+  /* Error banner */
+  .error-banner { display:none;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);border-radius:8px;padding:14px 18px;margin-bottom:20px;font-size:13px;color:var(--accent4); }
+  .error-banner code { font-family:'IBM Plex Mono',monospace;font-size:11px;background:rgba(248,113,113,.1);padding:2px 6px;border-radius:3px; }
+
+  footer { text-align:center;padding:20px;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;color:var(--muted);border-top:1px solid var(--border);margin-top:8px; }
+  footer span { color:var(--accent); }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <div class="load-text">Loading real data from CSV files...</div>
+</div>
+
+<header>
+  <div class="logo">
+    <div class="dot"></div>
+    <div class="logo-text">SEARCH<span>.</span>ANALYTICS</div>
+  </div>
+  <div class="badge">● LIVE — REAL DATA</div>
+  <div class="ts" id="ts"></div>
+</header>
+
+<main>
+  <div class="error-banner" id="err">
+    ⚠️ Could not load CSV data files. Make sure you've run <code>bash export_for_dashboard.sh</code>
+    and all <code>data_*.csv</code> files are in the same folder as this HTML file.
+    Then open this file directly from that folder (not from Downloads).
+  </div>
+
+  <div class="kpi-row">
+    <div class="kpi g"><div class="kpi-label">Total Queries</div><div class="kpi-val" id="kv-queries">—</div><div class="kpi-sub">All time</div></div>
+    <div class="kpi b"><div class="kpi-label">Overall CTR</div><div class="kpi-val" id="kv-ctr">—</div><div class="kpi-sub">Queries with ≥1 click</div></div>
+    <div class="kpi a"><div class="kpi-label">Zero-Result Rate</div><div class="kpi-val" id="kv-zero">—</div><div class="kpi-sub">No results returned</div></div>
+    <div class="kpi r"><div class="kpi-label">Abandonment Rate</div><div class="kpi-val" id="kv-abandon">—</div><div class="kpi-sub">Results shown, no click</div></div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Query Volume</div>
+      <div class="card-sub">Daily search volume — last 30 days</div>
+      <div class="wrap"><canvas id="volumeChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Position Bias</div>
+      <div class="card-sub">CTR by search result rank</div>
+      <div class="wrap"><canvas id="positionChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="grid-3">
+    <div class="card">
+      <div class="card-title">Session Depth</div>
+      <div class="card-sub">Queries per session</div>
+      <div class="wrap"><canvas id="depthChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Device Split</div>
+      <div class="card-sub">Queries by device type</div>
+      <div class="wrap"><canvas id="deviceChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Dwell Time</div>
+      <div class="card-sub">Post-click engagement</div>
+      <div class="wrap"><canvas id="dwellChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="table-card">
+    <div class="card-title">Top Search Queries</div>
+    <div class="card-sub">Real Google Trends data · ranked by volume</div>
+    <table>
+      <thead><tr>
+        <th>#</th><th>Query</th><th>Category</th>
+        <th>Volume</th><th>CTR</th>
+      </tr></thead>
+      <tbody id="qtbody"></tbody>
+    </table>
+  </div>
+</main>
+
+<footer>SEARCH QUERY ANALYTICS · <span>REAL DATA</span> · GOOGLE INTERVIEW PORTFOLIO</footer>
+
+<script>
+Chart.defaults.color = '#64748b';
+Chart.defaults.font.family = "'IBM Plex Mono', monospace";
+Chart.defaults.font.size = 10;
+const gridColor = 'rgba(30,45,61,0.8)';
+
+document.getElementById('ts').textContent =
+  'UPDATED · ' + new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+
+// ── CSV LOADER ────────────────────────────────────────────────
+function loadCSV(filename) {
+  return new Promise((resolve, reject) => {
+    Papa.parse(filename, {
+      download: true,
+      header: true,
+      dynamicTyping: true,
+      complete: r => resolve(r.data.filter(row => Object.values(row).some(v => v !== null && v !== ''))),
+      error: e => reject(e)
+    });
+  });
+}
+
+async function loadAll() {
+  try {
+    const [kpis, daily, position, dwell, depth, devices, topq] = await Promise.all([
+      loadCSV('data_kpis.csv'),
+      loadCSV('data_daily.csv'),
+      loadCSV('data_position_bias.csv'),
+      loadCSV('data_dwell.csv'),
+      loadCSV('data_depth.csv'),
+      loadCSV('data_devices.csv'),
+      loadCSV('data_top_queries.csv'),
+    ]);
+
+    document.getElementById('loading').style.display = 'none';
+    buildDashboard(kpis[0], daily, position, dwell, depth, devices, topq);
+
+  } catch(e) {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('err').style.display = 'block';
+    console.error('CSV load error:', e);
+  }
+}
+
+function buildDashboard(kpi, daily, position, dwell, depth, devices, topq) {
+
+  // ── KPIs ───────────────────────────────────────────────────
+  document.getElementById('kv-queries').textContent =
+    kpi.total_queries >= 1000 ? (kpi.total_queries/1000).toFixed(1)+'K' : kpi.total_queries;
+  document.getElementById('kv-ctr').textContent     = kpi.overall_ctr + '%';
+  document.getElementById('kv-zero').textContent    = kpi.zero_result_rate + '%';
+  document.getElementById('kv-abandon').textContent = kpi.abandonment_rate + '%';
+
+  // ── VOLUME CHART ───────────────────────────────────────────
+  new Chart(document.getElementById('volumeChart'), {
+    type: 'bar',
+    data: {
+      labels: daily.map(r => {
+        const d = new Date(r.day);
+        return (d.getMonth()+1) + '/' + d.getDate();
+      }),
+      datasets: [
+        {
+          type: 'bar', label: 'Queries',
+          data: daily.map(r => r.queries),
+          backgroundColor: 'rgba(56,189,248,0.25)',
+          borderColor: 'rgba(56,189,248,0.7)',
+          borderWidth: 1, borderRadius: 3, yAxisID: 'y'
+        },
+        {
+          type: 'line', label: 'Zero-Result %',
+          data: daily.map(r => r.zero_pct),
+          borderColor: '#f87171', backgroundColor: 'rgba(248,113,113,0.08)',
+          borderWidth: 2, pointRadius: 2, tension: 0.4, fill: true, yAxisID: 'y1'
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: true, position: 'top',
+        labels: { color:'#94a3b8', font:{size:10}, padding:10, boxWidth:10 }},
+        tooltip: { backgroundColor:'#1a2a3d', borderColor:'#1e2d3d', borderWidth:1, padding:8 }},
+      scales: {
+        x: { grid:{color:gridColor}, ticks:{maxRotation:0, maxTicksLimit:10} },
+        y: { grid:{color:gridColor}, position:'left' },
+        y1: { grid:{display:false}, position:'right', ticks:{callback:v=>v+'%'} }
+      }
+    }
+  });
+
+  // ── POSITION BIAS ─────────────────────────────────────────
+  new Chart(document.getElementById('positionChart'), {
+    type: 'bar',
+    data: {
+      labels: position.map(r => '#' + r.position),
+      datasets: [{
+        data: position.map(r => r.ctr_pct),
+        backgroundColor: position.map(r =>
+          r.ctr_pct > 35 ? 'rgba(74,222,128,0.65)' :
+          r.ctr_pct > 15 ? 'rgba(56,189,248,0.55)' : 'rgba(100,116,139,0.4)'
+        ),
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend:{display:false}, tooltip:{backgroundColor:'#1a2a3d',borderColor:'#1e2d3d',borderWidth:1,padding:8,
+        callbacks:{label: ctx => ` CTR: ${ctx.parsed.y}%  |  Shown: ${position[ctx.dataIndex].shown}x`}} },
+      scales: {
+        x: { grid:{color:gridColor} },
+        y: { grid:{color:gridColor}, ticks:{callback:v=>v+'%'} }
+      }
+    }
+  });
+
+  // ── SESSION DEPTH ─────────────────────────────────────────
+  const depthColors = ['rgba(248,113,113,.55)','rgba(245,158,11,.5)','rgba(56,189,248,.5)','rgba(74,222,128,.55)','rgba(74,222,128,.35)'];
+  new Chart(document.getElementById('depthChart'), {
+    type: 'bar',
+    data: {
+      labels: depth.map(r => r.depth + (r.depth==1?' query':' queries')),
+      datasets: [{
+        data: depth.map(r => r.sessions),
+        backgroundColor: depth.map((_,i) => depthColors[i] || 'rgba(100,116,139,.4)'),
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend:{display:false}, tooltip:{backgroundColor:'#1a2a3d',borderColor:'#1e2d3d',borderWidth:1,padding:8} },
+      scales: {
+        x: { grid:{color:gridColor} },
+        y: { grid:{color:gridColor}, ticks:{stepSize:50} }
+      }
+    }
+  });
+
+  // ── DEVICE PIE ────────────────────────────────────────────
+  new Chart(document.getElementById('deviceChart'), {
+    type: 'doughnut',
+    data: {
+      labels: devices.map(r => r.device_type || 'unknown'),
+      datasets: [{
+        data: devices.map(r => r.queries),
+        backgroundColor: ['rgba(56,189,248,.7)','rgba(74,222,128,.7)','rgba(245,158,11,.7)','rgba(248,113,113,.7)'],
+        borderColor: '#111827', borderWidth: 3, hoverOffset: 6
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '65%',
+      plugins: {
+        legend: { display:true, position:'bottom', labels:{color:'#94a3b8',font:{size:10},padding:10} },
+        tooltip: { backgroundColor:'#1a2a3d', borderColor:'#1e2d3d', borderWidth:1, padding:8,
+          callbacks:{label: ctx => ` ${ctx.label}: ${ctx.parsed} queries`} }
+      }
+    }
+  });
+
+  // ── DWELL TIME ────────────────────────────────────────────
+  const dwellColors = ['rgba(100,116,139,.4)','rgba(248,113,113,.5)','rgba(245,158,11,.5)',
+                       'rgba(56,189,248,.5)','rgba(74,222,128,.65)','rgba(74,222,128,.9)'];
+  new Chart(document.getElementById('dwellChart'), {
+    type: 'bar',
+    data: {
+      labels: dwell.map(r => r.bucket),
+      datasets: [{
+        data: dwell.map(r => r.clicks),
+        backgroundColor: dwell.map((_,i) => dwellColors[i] || 'rgba(100,116,139,.4)'),
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+      plugins: { legend:{display:false}, tooltip:{backgroundColor:'#1a2a3d',borderColor:'#1e2d3d',borderWidth:1,padding:8} },
+      scales: {
+        x: { grid:{color:gridColor}, ticks:{stepSize:25} },
+        y: { grid:{color:gridColor} }
+      }
+    }
+  });
+
+  // ── TOP QUERIES TABLE ─────────────────────────────────────
+  const maxVol = Math.max(...topq.map(r => r.searches));
+  const tagClass = { informational:'info', navigational:'nav', transactional:'trans' };
+  const tbody = document.getElementById('qtbody');
+
+  topq.forEach((row, i) => {
+    const ctrColor = row.ctr_pct >= 70 ? 'var(--accent)' : row.ctr_pct >= 50 ? 'var(--accent3)' : 'var(--accent4)';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><span class="rank ${i<3?'top':''}">${i+1}</span></td>
+      <td style="font-family:'IBM Plex Mono',monospace;font-size:11px">${row.query_text_normalized}</td>
+      <td><span class="tag ${tagClass[row.query_category]||'info'}">${row.query_category||'—'}</span></td>
+      <td>
+        <div class="bar-wrap">
+          <div class="bar-bg"><div class="bar-fill" style="width:${row.searches/maxVol*100}%"></div></div>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#94a3b8;min-width:28px">${row.searches}</span>
+        </div>
+      </td>
+      <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:${ctrColor}">${row.ctr_pct}%</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// Start loading
+loadAll();
+</script>
+</body>
+</html>

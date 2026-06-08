@@ -178,24 +178,6 @@ All charts pull from CSV exports of the live PostgreSQL database.
 
 ---
 
-## Key Interview Talking Points
-
-**Why partition by month instead of indexing?**
-At scale, even an indexed scan reads millions of leaf pages for a large date range. Partition pruning eliminates entire storage segments before any scan starts — a fundamentally different and more scalable mechanism.
-
-**Why a recursive CTE for reformulations?**
-The parent-child reformulation chain has variable depth. Recursion handles it generically without knowing depth upfront. A subquery cannot express variable-depth traversal.
-
-**Why materialize the CTR view?**
-The join + aggregation is expensive at scale. Dashboards don't need real-time data, so precomputing nightly is the right trade-off between cost and freshness.
-
-**What does a rising zero-result rate signal?**
-Index coverage gaps, new product launches with no content, crawl/indexing delays, or a serving incident. Google SREs monitor this metric in real time.
-
-**How would you scale this to Google scale?**
-Replace the Python loader with Pub/Sub → Dataflow for streaming ingestion. Switch to BigQuery with day-level partitioning + clustering by `query_text_normalized`. Move dbt to Cloud with CI/CD. Add slot reservations for predictable cost at scale.
-
----
 
 ## BigQuery Extension
 
